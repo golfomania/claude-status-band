@@ -1,0 +1,8 @@
+{
+  "name": "status-band",
+  "version": "0.1.0",
+  "description": "Band above the prompt: last two path segments, git branch, 5h and weekly rate-limit bars with percentages, model and session cost",
+  "author": { "name": "golfomania" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
