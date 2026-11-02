@@ -10,6 +10,16 @@ const meta = atom({ plugin: 'status-band', key: 'meta' } as const, { model: null
 const BAR_WIDTH = 10
 const REFRESH_MS = 15_000
 
+// Only the windows the account reports are drawn, in this order; an unknown kind goes last under its own name.
+const LABELS: Record<string, string> = { five_hour: '5h', seven_day: 'Week', spend_limit: 'Spend' }
+const ORDER = ['five_hour', 'seven_day', 'spend_limit']
+
+const labelFor = (kind: string): string => LABELS[kind] ?? kind
+const rankOf = (kind: string): number => {
+  const i = ORDER.indexOf(kind)
+  return i === -1 ? ORDER.length : i
+}
+
 const shortPath = (cwd: string): string =>
   cwd.split('/').filter(Boolean).slice(-2).join('/') || '/'
 
@@ -104,25 +114,16 @@ export const register: Register = on => {
     const [r, rows, m, now] = await Promise.all([read($, repo), read($, limits), read($, meta), $.clock.now()])
     const { Box, Text } = $.ui.resolve(e)
 
-    const five = rows.find(l => l.kind === 'five_hour')
-    const week = rows.find(l => l.kind === 'seven_day')
+    const sorted = [...rows].sort((a, b) => rankOf(a.kind) - rankOf(b.kind))
 
-    const limit = (label: string, l: Limit | undefined) => {
-      if (!l) {
-        return (
-          <Box gap={1}>
-            <Text dimColor>{label}</Text>
-            <Text dimColor>–</Text>
-          </Box>
-        )
-      }
+    const limit = (l: Limit) => {
       const pct = Math.round(l.percentUsed)
       const color = colorFor(l.percentUsed)
       const { filled, empty } = bar(l.percentUsed)
       const reset = resetsIn(l.resetsAt, now)
       return (
         <Box gap={1}>
-          <Text weight="semibold">{label}</Text>
+          <Text weight="semibold">{labelFor(l.kind)}</Text>
           <Box>
             <Text color={color}>{filled}</Text>
             <Text dimColor>{empty}</Text>
@@ -135,6 +136,17 @@ export const register: Register = on => {
       )
     }
 
+    const limitParts =
+      sorted.length === 0
+        ? [
+            <Text color="success">│</Text>,
+            <Box gap={1}>
+              <Text dimColor>limits</Text>
+              <Text dimColor>–</Text>
+            </Box>,
+          ]
+        : sorted.flatMap(l => [<Text color="success">│</Text>, limit(l)])
+
     return (
       <Box gap={2} borderStyle="round" borderColor="success" paddingX={1} alignSelf="flex-start">
         <Box gap={1}>
@@ -146,10 +158,7 @@ export const register: Register = on => {
             <Text dimColor>no git</Text>
           )}
         </Box>
-        <Text color="success">│</Text>
-        {limit('5h', five)}
-        <Text color="success">│</Text>
-        {limit('Week', week)}
+        {limitParts}
         <Text color="success">│</Text>
         <Box gap={1}>
           {m.model ? <Text color="claude">{m.model}</Text> : null}
