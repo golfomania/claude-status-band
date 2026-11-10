@@ -5,7 +5,7 @@ import type { Limit, Meta, Repo } from '../types'
 
 const repo = atom({ plugin: 'status-band', key: 'repo' } as const, null as Repo | null)
 const limits = atom({ plugin: 'status-band', key: 'limits' } as const, [] as Limit[])
-const meta = atom({ plugin: 'status-band', key: 'meta' } as const, { model: null, usd: null } as Meta)
+const meta = atom({ plugin: 'status-band', key: 'meta' } as const, { model: null, effort: null, usd: null } as Meta)
 
 const BAR_WIDTH = 10
 const REFRESH_MS = 15_000
@@ -72,11 +72,30 @@ async function refreshLimits($: EngineInterface, rows: readonly SessionRateLimit
   await update($, limits, () => next)
 }
 
-async function refreshMeta($: EngineInterface, usd: number | null | undefined): Promise<void> {
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+// The effort as a short word: a level as given, a number (an API value) as is, anything else dropped.
+const asEffort = (v: unknown): string | null => {
+  if (typeof v === 'string' && EFFORTS.includes(v)) return v
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  return null
+}
+
+// The session's effort setting, before the first request says what is actually sent.
+async function settingEffort($: EngineInterface): Promise<string | null> {
+  const v = await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)
+  return asEffort(v)
+}
+
+async function refreshMeta(
+  $: EngineInterface,
+  usd: number | null | undefined,
+  effort?: string | null,
+): Promise<void> {
   const model = await $.session.model().catch(() => null)
   const prev = await read($, meta)
-  const next: Meta = { model, usd: usd ?? prev.usd }
-  if (prev.model === next.model && prev.usd === next.usd) return
+  const next: Meta = { model, effort: effort === undefined ? prev.effort : effort, usd: usd ?? prev.usd }
+  if (prev.model === next.model && prev.effort === next.effort && prev.usd === next.usd) return
   await update($, meta, () => next)
 }
 
@@ -89,7 +108,7 @@ export const register: Register = on => {
     await refreshRepo($, started.cwd)
     const usage = await $.session.usage().catch(() => null)
     if (usage) await refreshLimits($, usage.rateLimits)
-    await refreshMeta($, usage?.cost?.usd ?? null)
+    await refreshMeta($, usage?.cost?.usd ?? null, await settingEffort($))
 
     $.clock.every(REFRESH_MS, () => {
       void (async () => {
@@ -106,6 +125,15 @@ export const register: Register = on => {
     await refreshLimits($, e.rateLimits)
     await refreshMeta($, e.cost?.usd ?? null)
     return next(e)
+  })
+
+  // Each model request of the main loop says which effort it is sent with; the band shows the latest.
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined) {
+      const effort = asEffort(e.effort)
+      if (effort !== null) await refreshMeta($, undefined, effort).catch(() => undefined)
+    }
+    return yield* next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -162,6 +190,7 @@ export const register: Register = on => {
         <Text color="success">│</Text>
         <Box gap={1}>
           {m.model ? <Text color="claude">{m.model}</Text> : null}
+          {m.effort ? <Text dimColor>{m.effort}</Text> : null}
           {m.usd !== null ? <Text dimColor>{fmtUsd(m.usd)}</Text> : null}
         </Box>
       </Box>

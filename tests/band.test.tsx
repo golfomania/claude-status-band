@@ -68,3 +68,20 @@ test('no reading yet: a dim placeholder', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^Week$/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('the effort is drawn between model and cost', async ($, on) => {
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('clock.now', () => ({ value: NOW }))
+  on('session.usage', () => ({ value: usage([WEEK]) as never }))
+  on('session.model', () => ({ value: 'claude-fable-5-1' }))
+  on('settings.read', () => ({ value: { effortLevel: 'high' } }))
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: /^claude-fable-5-1$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^high$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$2\.52$/ })).toBeDefined()
+    await ui.unmount()
+  }
+})

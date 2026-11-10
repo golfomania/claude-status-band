@@ -1,7 +1,7 @@
 {
   "name": "status-band",
-  "version": "0.2.0",
-  "description": "Band above the prompt: last two path segments, git branch, the rate-limit windows the account reports (5h, weekly) as bars with percentages, model and session cost",
+  "version": "0.3.0",
+  "description": "Band above the prompt: last two path segments, git branch, the rate-limit windows the account reports (5h, weekly) as bars with percentages, model, effort and session cost",
   "author": { "name": "golfomania" },
   "license": "MIT",
   "types": "./types/index.d.ts"
